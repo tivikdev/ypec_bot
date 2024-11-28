@@ -15,6 +15,7 @@
 ![Postgres](https://img.shields.io/badge/postgres-%23316192.svg?style=for-the-badge&logo=postgresql&logoColor=white)
 ![Ubuntu](https://img.shields.io/badge/Ubuntu-E95420?style=for-the-badge&logo=ubuntu&logoColor=white)
 
+# Сделаны некоторые фиксы для запуска бота, однако бот не выдаёт основное расписание и замены
 
 ## Описание
 Ежедневная рассылка готового расписания (соединение [основного расписания](https://www.ypec.ru/rasp-z) с [заменами](https://www.ypec.ru/rasp-zmnext), которые появляются каждый день на сайте), а также отслеживание изменений в заменах в течение дня с последующим оповещением пользователей
@@ -55,28 +56,35 @@
 - [ ] Новости, спортивные и другие мероприятия (откуда брать инфу???)
 
 
-## Порядок установки на VPS (Ubuntu 20.04.3 LTS)
+## Порядок установки на VPS (Ubuntu 20.04.6 LTS) от kvmka.ru
 
 Для установки бота на сервер, настройки и дальнейшего администрирования советую использовать [PuTTY](https://www.putty.org). А также [WinSCP](https://winscp.net/eng/download.php) для удобного взаимодействия с файлами проекта.
 
 На телефоне у меня стоят [JuiceSSH](https://play.google.com/store/apps/details?id=com.sonelli.juicessh&hl=ru&gl=RU) и [PostgreSQL Viewer](https://play.google.com/store/apps/details?id=com.sise15.postgresqlviewer&hl=ru&gl=RU)
 
 ```
-sudo adduser ypec
+sudo adduser -m ypec
 
-sudo apt update
-sudo apt upgrade
-sudo apt install python3.8
-sudo apt install python3-pip
+sudo apt update && sudo apt upgrade -y
+apt install postgresql postgresql-contrib python3 python3-pip language-pack-ru libpq-dev python-dev
+```
 
-sudo apt update
-sudo apt install postgresql postgresql-contrib
+Python обязательно должен быть версии 3.8!
+Версию можно проверить так
+```
+python3 --version
+```
+
+При необходимости меняем часовой пояс, на VPS от kvmka уже московское время
+```
+timedatectl
+timedatectl list-timezones
+sudo timedatectl set-timezone Europe/Moscow
 ```
 
 Настраиваем локаль через пакет, выбирая ru_RU.utf8:
 ```
 dpkg-reconfigure locales
-apt-get install language-pack-ru
 ```
 
 Изменяем локаль кластера базы данных (12 заменяем на вашу версию postgres)
@@ -84,6 +92,9 @@ apt-get install language-pack-ru
 pg_lsclusters
 pg_dropcluster --stop 12 main
 pg_createcluster --locale ru_RU.utf8 --start 12 main
+systemctl start postgresql
+systemctl restart postgresql
+systemctl enable postgresql
 ```
 
 Создаём пользователя, создаём базу данных и добавляем расширение pg_trgm
@@ -92,6 +103,13 @@ sudo -i -u postgres
   psql
     CREATE USER ypec WITH PASSWORD '123456789';
     CREATE DATABASE ypec_bot;
+    CREATE EXTENSION pg_trgm;
+    # Дальше возможные фиксы доступа к БД
+    GRANT ALL PRIVILEGES ON DATABASE ypec_bot to ypec;
+
+    # ОПАСНО!!!, но работает. Пользователю ypec даются все права, как у пользователя postgres.
+    # Пhосмотреть пользователей и их роли можно командой \du
+    ALTER ROLE ypec WITH superuser createrole createdb replication bypassrls;
     \q
   exit
 ```
@@ -101,6 +119,11 @@ sudo -i -u postgres
 cd /home/ypec
 git clone https://github.com/nik20z/ypec_bot.git
 cd ypec_bot
+```
+
+Не забудь дать разрешение на запуск
+```
+chmod +x run.sh
 ```
 
 Устанавливаем необходимые библиотеки
@@ -126,27 +149,13 @@ pip3 install -r requirements.txt
 
 Перед созданием службы, перезапускающей скрипт, необходимо в папку /etc/systemd/system поместить файл ypec_bot.service
 ```
-apt-get install systemd
+apt install systemd
 systemctl daemon-reload
 systemctl enable ypec_bot
 systemctl start ypec_bot
 systemctl status ypec_bot
 ```
 
-## Решение некоторых проблем
-
-При необходимости меняем часовой пояс
-```
-timedatectl
-timedatectl list-timezones
-sudo timedatectl set-timezone Europe/Moscow
-```
-
-Если возникают проблемы с установкой python
-```
-sudo apt-get install libpq-dev
-sudo apt-get install python-dev
-```
 
 ## После полной настройки и запуска бота
 
